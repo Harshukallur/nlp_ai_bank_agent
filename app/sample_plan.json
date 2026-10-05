@@ -1,0 +1,30 @@
+{
+  "status": "success",
+  "steps": [
+    {
+      "api": "/account/new",
+      "parameters": {
+        "account_type": "savings"
+      }
+    },
+    {
+      "api": "/account/deposit",
+      "parameters": {
+        "amount": 10000,
+        "currency": "INR"
+      }
+    },
+    {
+      "api": "/account/changeAccountType",
+      "parameters": {
+        "account_type": "current"
+      }
+    },
+    {
+      "api": "/account/notification/email",
+      "parameters": {
+        "notification_type": "confirmation"
+      }
+    }
+  ]
+}

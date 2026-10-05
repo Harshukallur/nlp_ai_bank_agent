@@ -1,0 +1,261 @@
+{
+  "test_cases": [
+    {
+      "name": "Valid savings account creation",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/new",
+            "parameters": {
+              "account_type": "savings"
+            }
+          }
+        ]
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": true
+    },
+    {
+      "name": "Valid deposit of 10000 INR",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/deposit",
+            "parameters": {
+              "amount": 10000,
+              "currency": "INR"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": true,
+        "account_type": "savings",
+        "balance": 0
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": true
+    },
+    {
+      "name": "Valid conversion to current",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/changeAccountType",
+            "parameters": {
+              "account_type": "current"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": true,
+        "account_type": "savings",
+        "balance": 10000
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": true
+    },
+    {
+      "name": "Valid complete account workflow",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/new",
+            "parameters": {
+              "account_type": "savings"
+            }
+          },
+          {
+            "api": "/account/deposit",
+            "parameters": {
+              "amount": 10000,
+              "currency": "INR"
+            }
+          },
+          {
+            "api": "/account/changeAccountType",
+            "parameters": {
+              "account_type": "current"
+            }
+          },
+          {
+            "api": "/account/notification/email",
+            "parameters": {
+              "notification_type": "confirmation"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": false,
+        "account_type": null,
+        "balance": 0
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": true
+    },
+    {
+      "name": "Reject unknown API",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/transfer",
+            "parameters": {
+              "amount": 5000,
+              "currency": "INR"
+            }
+          }
+        ]
+      },
+      "expected_api_validation": false,
+      "expected_business_validation": true
+    },
+    {
+      "name": "Reject invalid account type",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/new",
+            "parameters": {
+              "account_type": "premium"
+            }
+          }
+        ]
+      },
+      "expected_api_validation": false,
+      "expected_business_validation": false
+    },
+    {
+      "name": "Reject deposit below minimum",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/deposit",
+            "parameters": {
+              "amount": 5000,
+              "currency": "INR"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": true,
+        "account_type": "savings",
+        "balance": 0
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": false
+    },
+    {
+      "name": "Reject deposit above maximum",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/deposit",
+            "parameters": {
+              "amount": 60000,
+              "currency": "INR"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": true,
+        "account_type": "savings",
+        "balance": 0
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": false
+    },
+    {
+      "name": "Reject conversion before minimum deposit",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/changeAccountType",
+            "parameters": {
+              "account_type": "current"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": true,
+        "account_type": "savings",
+        "balance": 5000
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": false
+    },
+    {
+      "name": "Reject current account creation",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/new",
+            "parameters": {
+              "account_type": "current"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": false,
+        "account_type": null,
+        "balance": 0
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": false
+    },
+    {
+      "name": "Reject deposit when no account exists",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/deposit",
+            "parameters": {
+              "amount": 10000,
+              "currency": "INR"
+            }
+          }
+        ]
+      },
+      "account_state": {
+        "account_exists": false,
+        "account_type": null,
+        "balance": 0
+      },
+      "expected_api_validation": true,
+      "expected_business_validation": false
+    },
+    {
+      "name": "Reject unexpected parameter",
+      "plan": {
+        "status": "success",
+        "steps": [
+          {
+            "api": "/account/new",
+            "parameters": {
+              "account_type": "savings",
+              "unknown_parameter": "test"
+            }
+          }
+        ]
+      },
+      "expected_api_validation": false,
+      "expected_business_validation": true
+    }
+  ]
+}

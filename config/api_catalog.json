@@ -1,0 +1,63 @@
+{
+  "apis": [
+    {
+      "name": "create_account",
+      "endpoint": "/account/new",
+      "method": "POST",
+      "description": "Creates a new bank account",
+      "parameters": {
+        "account_type": {
+          "type": "string",
+          "allowed_values": [
+            "savings",
+            "current"
+          ]
+        }
+      }
+    },
+   {
+    "name": "deposit",
+    "endpoint": "/account/deposit",
+    "method": "POST",
+    "description": "Deposits money into an account",
+    "parameters": {
+        "amount": {
+            "type": "number"
+        },
+        "currency": {
+            "type": "string",
+            "allowed_values": ["INR"]
+        }
+    }
+},
+    {
+      "name": "change_account_type",
+      "endpoint": "/account/changeAccountType",
+      "method": "POST",
+      "description": "Changes an account from one type to another",
+      "parameters": {
+        "account_type": {
+          "type": "string",
+          "allowed_values": [
+            "savings",
+            "current"
+          ]
+        }
+      }
+    },
+    {
+      "name": "email_confirmation",
+      "endpoint": "/account/notification/email",
+      "method": "POST",
+      "description": "Sends an account confirmation email",
+      "parameters": {
+        "notification_type": {
+          "type": "string",
+          "allowed_values": [
+            "confirmation"
+          ]
+        }
+      }
+    }
+  ]
+}

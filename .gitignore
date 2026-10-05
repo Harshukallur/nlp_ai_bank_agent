@@ -1,0 +1,36 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Model files
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Hugging Face cache
+.cache/
+huggingface/
+.huggingface/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Test/cache
+.pytest_cache/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
