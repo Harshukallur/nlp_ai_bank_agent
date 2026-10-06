@@ -10,6 +10,17 @@ class APIClient:
 
         self.next_account_id = 1001
 
+        # Stores user-friendly activity history
+        self.activity = []
+
+    # --------------------------------------------------
+    # Get activity history
+    # --------------------------------------------------
+
+    def get_activity(self):
+
+        return self.activity.copy()
+
     # --------------------------------------------------
     # API execution
     # --------------------------------------------------
@@ -43,6 +54,15 @@ class APIClient:
                 "currency": "INR"
             }
 
+            # Record activity
+            self.activity.append({
+                "action": "Account created",
+                "description": (
+                    f"{parameters['account_type'].capitalize()} "
+                    "account created"
+                )
+            })
+
             return {
                 "status": "success",
                 "message": "Account created successfully.",
@@ -65,6 +85,12 @@ class APIClient:
             amount = parameters["amount"]
 
             self.account["balance"] += amount
+
+            # Record activity
+            self.activity.append({
+                "action": "Deposit completed",
+                "description": f"₹{amount} deposited"
+            })
 
             return {
                 "status": "success",
@@ -89,6 +115,15 @@ class APIClient:
 
             self.account["account_type"] = new_account_type
 
+            # Record activity
+            self.activity.append({
+                "action": "Account converted",
+                "description": (
+                    f"Account converted to "
+                    f"{new_account_type.capitalize()}"
+                )
+            })
+
             return {
                 "status": "success",
                 "message": "Account type changed successfully.",
@@ -107,6 +142,12 @@ class APIClient:
                     "status": "failed",
                     "message": "No account exists."
                 }
+
+            # Record activity
+            self.activity.append({
+                "action": "Email confirmation sent",
+                "description": "Account confirmation email sent"
+            })
 
             return {
                 "status": "success",

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>AI Account Assistant</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+</head>
+
+
+<body>
+
+    <div class="app">
+
+
+        <!-- ==================================================
+             SIDEBAR
+        =================================================== -->
+
+        <aside class="sidebar">
+
+
+            <!-- Logo -->
+
+            <div class="logo">
+
+                <div class="logo-icon">
+                    AI
+                </div>
+
+                <div>
+
+                    <h2>
+                        Account AI
+                    </h2>
+
+                    <span>
+                        Assistant
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- Navigation -->
+
+            <nav>
+
+                <a
+                    href="#home"
+                    class="nav-item active"
+                    id="homeNav"
+                >
+
+                    <span>
+                        ⌂
+                    </span>
+
+                    Home
+
+                </a>
+
+
+                <a
+                    href="#account"
+                    class="nav-item"
+                    id="accountNav"
+                >
+
+                    <span>
+                        ◉
+                    </span>
+
+                    Account
+
+                </a>
+
+
+                <a
+                    href="#activity"
+                    class="nav-item"
+                    id="activityNav"
+                >
+
+                    <span>
+                        ↗
+                    </span>
+
+                    Activity
+
+                </a>
+
+
+                <a
+                    href="#settings"
+                    class="nav-item"
+                    id="settingsNav"
+                >
+
+                    <span>
+                        ⚙
+                    </span>
+
+                    Settings
+
+                </a>
+
+            </nav>
+
+
+            <!-- System Status -->
+
+            <div class="sidebar-bottom">
+
+                <div class="status-dot"></div>
+
+                <div>
+
+                    <strong>
+                        System Online
+                    </strong>
+
+                    <small>
+                        AI Assistant Ready
+                    </small>
+
+                </div>
+
+            </div>
+
+
+        </aside>
+
+
+        <!-- ==================================================
+             MAIN CONTENT
+        =================================================== -->
+
+        <main class="main">
+
+
+            <!-- ==================================================
+                 TOP BAR
+            =================================================== -->
+
+            <header class="topbar">
+
+                <div>
+
+                    <h1>
+                        AI Account Assistant
+                    </h1>
+
+                    <p>
+                        Manage your account using natural language
+                    </p>
+
+                </div>
+
+
+                <div class="online">
+
+                    <span></span>
+
+                    Online
+
+                </div>
+
+            </header>
+
+
+            <!-- ==================================================
+                 PAGE CONTENT
+            =================================================== -->
+
+            <section class="content">
+
+
+                <!-- ==================================================
+                     HOME / WELCOME
+                =================================================== -->
+
+                <div
+                    class="welcome"
+                    id="homeSection"
+                >
+
+                    <h2>
+                        How can I help you today? 👋
+                    </h2>
+
+                    <p>
+                        Tell me what you want to do with your account.
+                    </p>
+
+                </div>
+
+
+                <!-- ==================================================
+                     CHAT CONTAINER
+                =================================================== -->
+
+                <div class="chat-container">
+
+
+                    <!-- Chat Messages -->
+
+                    <div
+                        id="chatMessages"
+                        class="chat-messages"
+                    >
+
+
+                        <!-- Initial Assistant Message -->
+
+                        <div class="assistant-message">
+
+                            <div class="avatar">
+                                AI
+                            </div>
+
+                            <div class="message">
+
+                                Hello! I can help you manage
+                                your account. What would you
+                                like to do?
+
+                            </div>
+
+                        </div>
+
+
+                    </div>
+
+
+                    <!-- ==================================================
+                         CHAT INPUT
+                    =================================================== -->
+
+                    <div class="input-area">
+
+
+                        <input
+                            id="messageInput"
+                            type="text"
+                            placeholder="Example: Create a savings account"
+                            autocomplete="off"
+                        >
+
+
+                        <button
+                            id="sendButton"
+                            type="button"
+                        >
+
+                            Send
+
+                        </button>
+
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- ==================================================
+                     ACCOUNT CARD
+                =================================================== -->
+
+                <div
+                    class="account-card"
+                    id="accountSection"
+                >
+
+
+                    <!-- Account Header -->
+
+                    <div class="account-header">
+
+
+                        <div>
+
+                            <span class="label">
+                                YOUR ACCOUNT
+                            </span>
+
+
+                            <h3 id="accountId">
+                                No account
+                            </h3>
+
+                        </div>
+
+
+                        <div class="account-icon">
+                            ₹
+                        </div>
+
+
+                    </div>
+
+
+                    <!-- Account Details -->
+
+                    <div class="account-details">
+
+
+                        <!-- Account Type -->
+
+                        <div>
+
+                            <span>
+                                Account Type
+                            </span>
+
+                            <strong id="accountType">
+                                —
+                            </strong>
+
+                        </div>
+
+
+                        <!-- Balance -->
+
+                        <div>
+
+                            <span>
+                                Balance
+                            </span>
+
+                            <strong id="accountBalance">
+                                ₹0
+                            </strong>
+
+                        </div>
+
+
+                        <!-- Currency -->
+
+                        <div>
+
+                            <span>
+                                Currency
+                            </span>
+
+                            <strong id="accountCurrency">
+                                INR
+                            </strong>
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- ==================================================
+                     ACTIVITY SECTION
+                =================================================== -->
+
+                <div
+                    id="activitySection"
+                    class="activity-section"
+                >
+
+
+                    <!-- Activity Header -->
+
+                    <div class="activity-header">
+
+
+                        <div>
+
+                            <span class="label">
+                                RECENT ACTIVITY
+                            </span>
+
+
+                            <h3>
+                                Account Activity
+                            </h3>
+
+                        </div>
+
+
+                        <div class="activity-icon">
+                            ↗
+                        </div>
+
+
+                    </div>
+
+
+                    <!-- Activity List -->
+
+                    <div
+                        id="activityList"
+                        class="activity-list"
+                    >
+
+                        <div class="activity-empty">
+
+                            No activity yet.
+
+                        </div>
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- ==================================================
+                     SETTINGS PLACEHOLDER
+                =================================================== -->
+
+                <div
+                    id="settingsSection"
+                    class="activity-section"
+                    style="display: none;"
+                >
+
+
+                    <div class="activity-header">
+
+
+                        <div>
+
+                            <span class="label">
+                                SETTINGS
+                            </span>
+
+
+                            <h3>
+                                Assistant Settings
+                            </h3>
+
+                        </div>
+
+
+                        <div class="activity-icon">
+                            ⚙
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="activity-list">
+
+
+                        <div class="activity-item">
+
+                            <div class="activity-check">
+                                ✓
+                            </div>
+
+
+                            <div>
+
+                                <strong>
+                                    AI Assistant
+                                </strong>
+
+                                <span>
+                                    Local AI assistant is running.
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="activity-item">
+
+                            <div class="activity-check">
+                                ✓
+                            </div>
+
+
+                            <div>
+
+                                <strong>
+                                    System Status
+                                </strong>
+
+                                <span>
+                                    Account services are online.
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+            </section>
+
+
+        </main>
+
+
+    </div>
+
+
+    <!-- ==================================================
+         JAVASCRIPT
+    =================================================== -->
+
+    <script
+        src="{{ url_for('static', filename='app.js') }}"
+    ></script>
+
+
+</body>
+
+</html>
