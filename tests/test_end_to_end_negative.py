@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 
 # Add project root to Python path
 PROJECT_ROOT = os.path.abspath(
@@ -9,137 +8,80 @@ PROJECT_ROOT = os.path.abspath(
 
 sys.path.insert(0, PROJECT_ROOT)
 
-from app.llm import LocalLLM
-from app.validator import APIValidator
+from app.service import AccountService
 
 
 def test_real_llm_rejects_unsupported_transfer():
 
     # --------------------------------------------------
-    # 1. Load local LLM
+    # 1. Create the actual AccountService
     # --------------------------------------------------
 
-    llm = LocalLLM()
+    service = AccountService()
 
     # --------------------------------------------------
-    # 2. Load API catalog
+    # 2. User requests an unsupported transfer operation
     # --------------------------------------------------
 
-    catalog_path = os.path.join(
-        PROJECT_ROOT,
-        "config",
-        "api_catalog.json"
+    user_request = (
+        "I want to transfer 20000 rupees "
+        "to another bank account."
     )
 
-    with open(catalog_path, "r") as file:
-        catalog = json.load(file)
-
-    catalog_text = json.dumps(
-        catalog,
-        indent=2
-    )
-
-    validator = APIValidator(catalog_path)
-
     # --------------------------------------------------
-    # 3. User asks for an unsupported operation
+    # 3. Process request through the REAL application
     # --------------------------------------------------
 
-    user_request = """
-    I want to transfer 20000 rupees to another bank account.
-    """
+    result = service.process_request(user_request)
 
     # --------------------------------------------------
-    # 4. Create prompt
+    # 4. Print result for debugging
     # --------------------------------------------------
-
-    prompt = f"""
-USER REQUEST:
-
-{user_request}
-
-API CATALOG:
-
-{catalog_text}
-
-Generate an API execution plan.
-
-Rules:
-
-1. Only use APIs from the catalog.
-2. Do not invent APIs.
-3. Do not substitute one API for another.
-4. If the requested operation does not have a matching API
-   in the catalog, do not use a different API.
-5. Do not use /account/deposit for a transfer request.
-6. Return JSON only.
-
-Expected format:
-
-{{
-    "status": "success",
-    "steps": [
-        {{
-            "api": "/endpoint",
-            "parameters": {{}}
-        }}
-    ]
-}}
-
-If the requested operation cannot be performed using
-the available APIs, return:
-
-{{
-    "status": "failed",
-    "steps": []
-}}
-"""
-
-    # --------------------------------------------------
-    # 5. Generate plan using REAL local LLM
-    # --------------------------------------------------
-
-    response = llm.generate(prompt)
 
     print("\n" + "=" * 60)
-    print("LLM RESPONSE")
+    print("END-TO-END RESULT")
     print("=" * 60)
-    print(response)
+    print(result)
 
     # --------------------------------------------------
-    # 6. Parse JSON
+    # 5. Verify request was rejected
     # --------------------------------------------------
 
-    try:
-        plan = json.loads(response)
-
-    except json.JSONDecodeError:
-        raise AssertionError(
-            "Local LLM did not return valid JSON."
-        )
+    assert result["status"] == "failed", (
+        "Unsupported transfer request should be rejected."
+    )
 
     # --------------------------------------------------
-    # 7. Verify that LLM did NOT generate deposit API
+    # 6. Verify the correct rejection message
     # --------------------------------------------------
 
-    planned_apis = [
-        step.get("api")
-        for step in plan.get("steps", [])
-    ]
-
-    assert "/account/deposit" not in planned_apis
+    assert "transfer" in result["message"].lower(), (
+        "Rejection message should mention the unsupported "
+        "transfer operation."
+    )
 
     # --------------------------------------------------
-    # 8. Verify the request was rejected
+    # 7. Verify no API was executed
     # --------------------------------------------------
 
-    assert plan.get("status") == "failed"
+    account = service.api_client.get_account()
+
+    assert account is None, (
+        "No account should be created because the "
+        "unsupported transfer request must be rejected "
+        "before API execution."
+    )
 
     # --------------------------------------------------
-    # 9. Verify no API steps were generated
+    # 8. Verify no activity was recorded
     # --------------------------------------------------
 
-    assert plan.get("steps") == []
+    activity = service.api_client.get_activity()
+
+    assert activity == [], (
+        "No account activity should be recorded for a "
+        "rejected transfer request."
+    )
 
     print("\n" + "=" * 60)
     print("NEGATIVE END-TO-END TEST PASSED")
