@@ -1,538 +1,238 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Account Assistant</title>
-
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='style.css') }}"
-    >
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        [hidden] { display: none !important; }
+        .auth-container {
+            max-width: 420px;
+            margin: 70px auto;
+            padding: 32px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,.08);
+        }
+        .auth-container h2 { margin-top: 0; }
+        .auth-container label {
+            display: block;
+            margin: 16px 0 6px;
+            font-weight: 600;
+        }
+        .auth-container input {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        .auth-container button, .logout-button {
+            padding: 11px 16px;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #6366f1;
+            color: white;
+            font-weight: 600;
+        }
+        .auth-container button { width: 100%; margin-top: 18px; }
+        .auth-switch { margin-top: 18px; text-align: center; }
+        .auth-switch button {
+            width: auto;
+            padding: 0;
+            margin: 0;
+            background: transparent;
+            color: #4f46e5;
+        }
+        #authMessage { margin-top: 14px; white-space: pre-wrap; }
+        .auth-error { color: #b91c1c; }
+        .auth-success { color: #047857; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .user-controls { display: flex; align-items: center; gap: 12px; }
+        @media (max-width: 600px) {
+            .auth-container { margin: 24px 12px; padding: 22px; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+        }
+    </style>
 </head>
-
-
 <body>
 
-    <div class="app">
-
-
-        <!-- ==================================================
-             SIDEBAR
-        =================================================== -->
-
-        <aside class="sidebar">
-
-
-            <!-- Logo -->
-
-            <div class="logo">
-
-                <div class="logo-icon">
-                    AI
-                </div>
-
-                <div>
-
-                    <h2>
-                        Account AI
-                    </h2>
-
-                    <span>
-                        Assistant
-                    </span>
-
-                </div>
-
+    <!-- Login and registration screen -->
+    <section id="authScreen" class="auth-container">
+        <div class="logo">
+            <div class="logo-icon">AI</div>
+            <div>
+                <h2>Account AI</h2>
+                <span>Secure Account Assistant</span>
             </div>
+        </div>
 
+        <h2 id="authTitle">Welcome back</h2>
+        <p id="authDescription">Log in to access your account.</p>
 
-            <!-- Navigation -->
+        <form id="authForm">
+            <label for="authUsername">Username</label>
+            <input id="authUsername" name="username" type="text"
+                   maxlength="80" autocomplete="username" required>
+
+            <label for="authPassword">Password</label>
+            <input id="authPassword" name="password" type="password"
+                   minlength="8" autocomplete="current-password" required>
+
+            <button id="authSubmit" type="submit">Log in</button>
+        </form>
+
+        <div class="auth-switch">
+            <span id="authSwitchText">New here?</span>
+            <button id="authSwitchButton" type="button">Create an account</button>
+        </div>
+
+        <p id="authMessage" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- Authenticated application -->
+    <div class="app" id="appScreen" hidden>
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">AI</div>
+                <div>
+                    <h2>Account AI</h2>
+                    <span>Assistant</span>
+                </div>
+            </div>
 
             <nav>
-
-                <a
-                    href="#home"
-                    class="nav-item active"
-                    id="homeNav"
-                >
-
-                    <span>
-                        ⌂
-                    </span>
-
-                    Home
-
+                <a href="#home" class="nav-item active" id="homeNav">
+                    <span>⌂</span> Home
                 </a>
-
-
-                <a
-                    href="#account"
-                    class="nav-item"
-                    id="accountNav"
-                >
-
-                    <span>
-                        ◉
-                    </span>
-
-                    Account
-
+                <a href="#account" class="nav-item" id="accountNav">
+                    <span>◉</span> Account
                 </a>
-
-
-                <a
-                    href="#activity"
-                    class="nav-item"
-                    id="activityNav"
-                >
-
-                    <span>
-                        ↗
-                    </span>
-
-                    Activity
-
+                <a href="#activity" class="nav-item" id="activityNav">
+                    <span>↔</span> Activity
                 </a>
-
-
-                <a
-                    href="#settings"
-                    class="nav-item"
-                    id="settingsNav"
-                >
-
-                    <span>
-                        ⚙
-                    </span>
-
-                    Settings
-
+                <a href="#settings" class="nav-item" id="settingsNav">
+                    <span>⚙</span> Settings
                 </a>
-
             </nav>
 
-
-            <!-- System Status -->
-
             <div class="sidebar-bottom">
-
                 <div class="status-dot"></div>
-
                 <div>
-
-                    <strong>
-                        System Online
-                    </strong>
-
-                    <small>
-                        AI Assistant Ready
-                    </small>
-
+                    <strong>System Online</strong>
+                    <small>AI Assistant Ready</small>
                 </div>
-
             </div>
-
-
         </aside>
 
-
-        <!-- ==================================================
-             MAIN CONTENT
-        =================================================== -->
-
         <main class="main">
-
-
-            <!-- ==================================================
-                 TOP BAR
-            =================================================== -->
-
             <header class="topbar">
-
                 <div>
-
-                    <h1>
-                        AI Account Assistant
-                    </h1>
-
-                    <p>
-                        Manage your account using natural language
-                    </p>
-
+                    <h1>AI Account Assistant</h1>
+                    <p>Manage your account using natural language</p>
                 </div>
-
-
-                <div class="online">
-
-                    <span></span>
-
-                    Online
-
+                <div class="user-controls">
+                    <span>Signed in as <strong id="currentUsername"></strong></span>
+                    <button id="logoutButton" class="logout-button" type="button">
+                        Log out
+                    </button>
                 </div>
-
             </header>
 
-
-            <!-- ==================================================
-                 PAGE CONTENT
-            =================================================== -->
-
             <section class="content">
-
-
-                <!-- ==================================================
-                     HOME / WELCOME
-                =================================================== -->
-
-                <div
-                    class="welcome"
-                    id="homeSection"
-                >
-
-                    <h2>
-                        How can I help you today? 👋
-                    </h2>
-
-                    <p>
-                        Tell me what you want to do with your account.
-                    </p>
-
+                <div class="welcome" id="homeSection">
+                    <h2>How can I help you today? 👋</h2>
+                    <p>Tell me what you want to do with your account.</p>
                 </div>
-
-
-                <!-- ==================================================
-                     CHAT CONTAINER
-                =================================================== -->
 
                 <div class="chat-container">
-
-
-                    <!-- Chat Messages -->
-
-                    <div
-                        id="chatMessages"
-                        class="chat-messages"
-                    >
-
-
-                        <!-- Initial Assistant Message -->
-
+                    <div id="chatMessages" class="chat-messages">
                         <div class="assistant-message">
-
-                            <div class="avatar">
-                                AI
-                            </div>
-
+                            <div class="avatar">AI</div>
                             <div class="message">
-
-                                Hello! I can help you manage
-                                your account. What would you
-                                like to do?
-
+                                Hello! I can help you manage your account.
+                                What would you like to do?
                             </div>
-
                         </div>
-
-
                     </div>
-
-
-                    <!-- ==================================================
-                         CHAT INPUT
-                    =================================================== -->
-
                     <div class="input-area">
-
-
-                        <input
-                            id="messageInput"
-                            type="text"
-                            placeholder="Example: Create a savings account"
-                            autocomplete="off"
-                        >
-
-
-                        <button
-                            id="sendButton"
-                            type="button"
-                        >
-
-                            Send
-
-                        </button>
-
-
+                        <input id="messageInput" type="text"
+                               placeholder="Example: Create a savings account"
+                               autocomplete="off">
+                        <button id="sendButton" type="button">Send</button>
                     </div>
-
-
                 </div>
 
-
-                <!-- ==================================================
-                     ACCOUNT CARD
-                =================================================== -->
-
-                <div
-                    class="account-card"
-                    id="accountSection"
-                >
-
-
-                    <!-- Account Header -->
-
+                <div class="account-card" id="accountSection">
                     <div class="account-header">
-
-
                         <div>
-
-                            <span class="label">
-                                YOUR ACCOUNT
-                            </span>
-
-
-                            <h3 id="accountId">
-                                No account
-                            </h3>
-
+                            <span class="label">YOUR ACCOUNT</span>
+                            <h3 id="accountId">No account</h3>
                         </div>
-
-
-                        <div class="account-icon">
-                            ₹
-                        </div>
-
-
+                        <div class="account-icon">₹</div>
                     </div>
-
-
-                    <!-- Account Details -->
-
                     <div class="account-details">
-
-
-                        <!-- Account Type -->
-
                         <div>
-
-                            <span>
-                                Account Type
-                            </span>
-
-                            <strong id="accountType">
-                                —
-                            </strong>
-
+                            <span>Account Type</span>
+                            <strong id="accountType">—</strong>
                         </div>
-
-
-                        <!-- Balance -->
-
                         <div>
-
-                            <span>
-                                Balance
-                            </span>
-
-                            <strong id="accountBalance">
-                                ₹0
-                            </strong>
-
+                            <span>Balance</span>
+                            <strong id="accountBalance">₹0</strong>
                         </div>
-
-
-                        <!-- Currency -->
-
                         <div>
-
-                            <span>
-                                Currency
-                            </span>
-
-                            <strong id="accountCurrency">
-                                INR
-                            </strong>
-
+                            <span>Currency</span>
+                            <strong id="accountCurrency">INR</strong>
                         </div>
-
-
                     </div>
-
-
                 </div>
 
-
-                <!-- ==================================================
-                     ACTIVITY SECTION
-                =================================================== -->
-
-                <div
-                    id="activitySection"
-                    class="activity-section"
-                >
-
-
-                    <!-- Activity Header -->
-
+                <div id="activitySection" class="activity-section" hidden>
                     <div class="activity-header">
-
-
                         <div>
-
-                            <span class="label">
-                                RECENT ACTIVITY
-                            </span>
-
-
-                            <h3>
-                                Account Activity
-                            </h3>
-
+                            <span class="label">RECENT ACTIVITY</span>
+                            <h3>Account Activity</h3>
                         </div>
-
-
-                        <div class="activity-icon">
-                            ↗
-                        </div>
-
-
+                        <div class="activity-icon">↔</div>
                     </div>
-
-
-                    <!-- Activity List -->
-
-                    <div
-                        id="activityList"
-                        class="activity-list"
-                    >
-
-                        <div class="activity-empty">
-
-                            No activity yet.
-
-                        </div>
-
+                    <div id="activityList" class="activity-list">
+                        <div class="activity-empty">No activity yet.</div>
                     </div>
-
-
                 </div>
 
-
-                <!-- ==================================================
-                     SETTINGS PLACEHOLDER
-                =================================================== -->
-
-                <div
-                    id="settingsSection"
-                    class="activity-section"
-                    style="display: none;"
-                >
-
-
+                <div id="settingsSection" class="activity-section" hidden>
                     <div class="activity-header">
-
-
                         <div>
-
-                            <span class="label">
-                                SETTINGS
-                            </span>
-
-
-                            <h3>
-                                Assistant Settings
-                            </h3>
-
+                            <span class="label">SETTINGS</span>
+                            <h3>Assistant Settings</h3>
                         </div>
-
-
-                        <div class="activity-icon">
-                            ⚙
-                        </div>
-
-
+                        <div class="activity-icon">⚙</div>
                     </div>
-
-
                     <div class="activity-list">
-
-
                         <div class="activity-item">
-
-                            <div class="activity-check">
-                                ✓
-                            </div>
-
-
+                            <div class="activity-check">✓</div>
                             <div>
-
-                                <strong>
-                                    AI Assistant
-                                </strong>
-
-                                <span>
-                                    Local AI assistant is running.
-                                </span>
-
+                                <strong>AI Assistant</strong>
+                                <span>Local AI assistant is running.</span>
                             </div>
-
                         </div>
-
-
                         <div class="activity-item">
-
-                            <div class="activity-check">
-                                ✓
-                            </div>
-
-
+                            <div class="activity-check">✓</div>
                             <div>
-
-                                <strong>
-                                    System Status
-                                </strong>
-
-                                <span>
-                                    Account services are online.
-                                </span>
-
+                                <strong>Account Security</strong>
+                                <span>Your dashboard requires an authenticated session.</span>
                             </div>
-
                         </div>
-
-
                     </div>
-
-
                 </div>
-
-
             </section>
-
-
         </main>
-
-
     </div>
 
-
-    <!-- ==================================================
-         JAVASCRIPT
-    =================================================== -->
-
-    <script
-        src="{{ url_for('static', filename='app.js') }}"
-    ></script>
-
-
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
-
 </html>

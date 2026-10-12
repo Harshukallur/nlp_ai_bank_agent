@@ -1,36 +1,76 @@
-# Virtual environment
+
+# ==================================================
+# Python virtual environments
+# ==================================================
 .venv/
 venv/
 env/
 
-# Python cache
+# ==================================================
+# Python cache and compiled files
+# ==================================================
 __pycache__/
 *.py[cod]
+*$py.class
 
-# Model files
+# ==================================================
+# Environment variables and secrets
+# ==================================================
+.env
+.env.*
+!.env.example
+
+# ==================================================
+# Local databases and database backups
+# ==================================================
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite3
+data/*.sqlite-*
+*.db-journal
+
+# ==================================================
+# Model weights and large model files
+# ==================================================
 models/
 *.bin
 *.safetensors
 *.pt
 *.pth
+*.onnx
 
-# Hugging Face cache
+# ==================================================
+# Hugging Face caches
+# ==================================================
 .cache/
 huggingface/
 .huggingface/
 
-# Environment variables / secrets
-.env
-.env.*
-
-# Test/cache
+# ==================================================
+# Python testing and coverage
+# ==================================================
 .pytest_cache/
 .coverage
+coverage.xml
+htmlcov/
 
-# IDE
+# ==================================================
+# IDE and editor settings
+# ==================================================
 .vscode/
 .idea/
 
-# OS
+# ==================================================
+# Operating system files
+# ==================================================
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# ==================================================
+# Logs and temporary files
+# ==================================================
+*.log
+*.tmp
+*.bak

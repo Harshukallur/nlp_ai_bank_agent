@@ -1,31 +1,22 @@
+
 import os
 import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 class APIClient:
 
     def __init__(self):
-
-        # --------------------------------------------------
-        # Database path
-        # --------------------------------------------------
-
-        BASE_DIR = os.path.dirname(
+        base_dir = os.path.dirname(
             os.path.dirname(os.path.abspath(__file__))
         )
+        data_dir = os.path.join(base_dir, "data")
+        os.makedirs(data_dir, exist_ok=True)
 
-        DATA_DIR = os.path.join(BASE_DIR, "data")
-
-        os.makedirs(DATA_DIR, exist_ok=True)
-
-        self.db_path = os.path.join(
-            DATA_DIR,
-            "account.db"
+        self.db_path = os.environ.get(
+            "ACCOUNT_DB_PATH",
+            os.path.join(data_dir, "account.db")
         )
-
-        # --------------------------------------------------
-        # Initialize database
-        # --------------------------------------------------
 
         self.initialize_database()
 
@@ -34,482 +25,420 @@ class APIClient:
     # ======================================================
 
     def get_connection(self):
-
-        connection = sqlite3.connect(
-            self.db_path
-        )
-
+        connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
-
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
-    # --------------------------------------------------
-    # Create tables
-    # --------------------------------------------------
-
     def initialize_database(self):
-
         connection = self.get_connection()
-
         cursor = connection.cursor()
 
-        # --------------------------------------------------
-        # Account table
-        # --------------------------------------------------
-
+        # Users: never store plain-text passwords.
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS account (
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id TEXT UNIQUE NOT NULL,
-                account_type TEXT NOT NULL,
-                balance REAL NOT NULL DEFAULT 0,
-                currency TEXT NOT NULL DEFAULT 'INR'
+                username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # --------------------------------------------------
-        # Transactions table
-        # --------------------------------------------------
+        # Exactly one account per user.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS account (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                account_id TEXT UNIQUE NOT NULL,
+                account_type TEXT NOT NULL,
+                balance REAL NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'INR',
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
                 transaction_type TEXT NOT NULL,
                 amount REAL NOT NULL,
                 currency TEXT NOT NULL,
-                balance_after REAL NOT NULL
+                balance_after REAL NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE
             )
         """)
-
-        # --------------------------------------------------
-        # Activity table
-        # --------------------------------------------------
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS activity (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
                 action TEXT NOT NULL,
-                description TEXT NOT NULL
+                description TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE
             )
         """)
 
         connection.commit()
-
         connection.close()
 
     # ======================================================
-    # ACTIVITY
+    # USER REGISTRATION AND LOGIN HELPERS
     # ======================================================
 
-    def get_activity(self):
+    def register_user(self, username, password):
+        username = username.strip()
+
+        if not username or not password:
+            return {
+                "status": "failed",
+                "message": "Username and password are required."
+            }
+
+        if len(password) < 8:
+            return {
+                "status": "failed",
+                "message": "Password must be at least 8 characters."
+            }
 
         connection = self.get_connection()
 
-        cursor = connection.cursor()
+        try:
+            connection.execute("""
+                INSERT INTO users (username, password_hash)
+                VALUES (?, ?)
+            """, (
+                username,
+                generate_password_hash(password)
+            ))
+            connection.commit()
 
-        cursor.execute("""
-            SELECT
-                action,
-                description
-            FROM activity
-            ORDER BY id ASC
-        """)
+            row = connection.execute("""
+                SELECT id, username FROM users
+                WHERE username = ?
+            """, (username,)).fetchone()
 
-        rows = cursor.fetchall()
-
-        connection.close()
-
-        return [
-            {
-                "action": row["action"],
-                "description": row["description"]
+            return {
+                "status": "success",
+                "user": {
+                    "id": row["id"],
+                    "username": row["username"]
+                }
             }
-            for row in rows
-        ]
+
+        except sqlite3.IntegrityError:
+            return {
+                "status": "failed",
+                "message": "That username is already registered."
+            }
+
+        finally:
+            connection.close()
+
+    def authenticate_user(self, username, password):
+        connection = self.get_connection()
+
+        try:
+            row = connection.execute("""
+                SELECT id, username, password_hash
+                FROM users
+                WHERE username = ?
+            """, (username.strip(),)).fetchone()
+
+            if row is None or not check_password_hash(
+                row["password_hash"], password
+            ):
+                return None
+
+            return {
+                "id": row["id"],
+                "username": row["username"]
+            }
+
+        finally:
+            connection.close()
+
+    def get_user(self, user_id):
+        connection = self.get_connection()
+
+        try:
+            row = connection.execute("""
+                SELECT id, username
+                FROM users
+                WHERE id = ?
+            """, (user_id,)).fetchone()
+
+            if row is None:
+                return None
+
+            return {
+                "id": row["id"],
+                "username": row["username"]
+            }
+
+        finally:
+            connection.close()
 
     # ======================================================
-    # TRANSACTIONS
+    # ACCOUNT HELPERS
     # ======================================================
 
-    def get_transactions(self):
+    def get_account(self, user_id):
+        if user_id is None:
+            return None
 
         connection = self.get_connection()
 
-        cursor = connection.cursor()
+        try:
+            row = connection.execute("""
+                SELECT account_id, account_type, balance, currency
+                FROM account
+                WHERE user_id = ?
+            """, (user_id,)).fetchone()
 
-        cursor.execute("""
-            SELECT
-                transaction_type,
-                amount,
-                currency,
-                balance_after
-            FROM transactions
-            ORDER BY id ASC
-        """)
+            return dict(row) if row else None
 
-        rows = cursor.fetchall()
+        finally:
+            connection.close()
 
-        connection.close()
+    def get_activity(self, user_id):
+        if user_id is None:
+            return []
 
-        return [
-            {
-                "type": row["transaction_type"],
-                "amount": row["amount"],
-                "currency": row["currency"],
-                "balance_after": row["balance_after"]
-            }
-            for row in rows
-        ]
+        connection = self.get_connection()
+
+        try:
+            rows = connection.execute("""
+                SELECT action, description, created_at
+                FROM activity
+                WHERE user_id = ?
+                ORDER BY id ASC
+            """, (user_id,)).fetchall()
+
+            return [dict(row) for row in rows]
+
+        finally:
+            connection.close()
+
+    def get_transactions(self, user_id):
+        if user_id is None:
+            return []
+
+        connection = self.get_connection()
+
+        try:
+            rows = connection.execute("""
+                SELECT transaction_type, amount, currency, balance_after,
+                       created_at
+                FROM transactions
+                WHERE user_id = ?
+                ORDER BY id ASC
+            """, (user_id,)).fetchall()
+
+            return [
+                {
+                    "type": row["transaction_type"],
+                    "amount": row["amount"],
+                    "currency": row["currency"],
+                    "balance_after": row["balance_after"],
+                    "created_at": row["created_at"]
+                }
+                for row in rows
+            ]
+
+        finally:
+            connection.close()
 
     # ======================================================
     # API EXECUTION
     # ======================================================
 
-    def call(self, endpoint, parameters):
+    def call(self, endpoint, parameters, user_id=None):
+        if user_id is None or self.get_user(user_id) is None:
+            return {
+                "status": "failed",
+                "message": "Please sign in before performing this action."
+            }
 
-        print(f"Calling {endpoint}")
-        print(f"Parameters: {parameters}")
+        parameters = parameters or {}
+        print(f"Calling {endpoint} for user_id={user_id}")
 
-        # ==================================================
+        # Load only the signed-in user's account.
+        account = self.get_account(user_id)
+
+        # --------------------------------------------------
         # CREATE ACCOUNT
-        # ==================================================
+        # --------------------------------------------------
 
         if endpoint == "/account/new":
+            if account is not None:
+                return {
+                    "status": "failed",
+                    "message": "You already have an account."
+                }
+
+            account_type = parameters.get("account_type")
+
+            if account_type not in ("savings", "current"):
+                return {
+                    "status": "failed",
+                    "message": "Invalid account type."
+                }
 
             connection = self.get_connection()
 
-            cursor = connection.cursor()
+            try:
+                # Generate a globally unique account ID.
+                row = connection.execute("""
+                    SELECT COALESCE(MAX(id), 0) + 1001 AS next_number
+                    FROM account
+                """).fetchone()
 
-            # Check whether account already exists
-            cursor.execute("""
-                SELECT *
-                FROM account
-                LIMIT 1
-            """)
+                account_id = f"ACC{row['next_number']}"
 
-            existing_account = cursor.fetchone()
+                connection.execute("""
+                    INSERT INTO account (
+                        user_id, account_id, account_type, balance, currency
+                    )
+                    VALUES (?, ?, ?, 0, 'INR')
+                """, (user_id, account_id, account_type))
 
-            if existing_account is not None:
+                connection.execute("""
+                    INSERT INTO activity (user_id, action, description)
+                    VALUES (?, ?, ?)
+                """, (
+                    user_id,
+                    "Account created",
+                    f"{account_type.capitalize()} account created"
+                ))
 
-                connection.close()
+                connection.commit()
 
                 return {
-                    "status": "failed",
-                    "message": "An account already exists."
+                    "status": "success",
+                    "message": "Account created successfully.",
+                    "account": {
+                        "account_id": account_id,
+                        "account_type": account_type,
+                        "balance": 0,
+                        "currency": "INR"
+                    }
                 }
 
-            # --------------------------------------------------
-            # Generate account ID
-            # --------------------------------------------------
+            except sqlite3.IntegrityError:
+                connection.rollback()
+                return {
+                    "status": "failed",
+                    "message": "You already have an account."
+                }
 
-            cursor.execute("""
-                SELECT account_id
-                FROM account
-                ORDER BY id DESC
-                LIMIT 1
-            """)
+            finally:
+                connection.close()
 
-            last_account = cursor.fetchone()
-
-            if last_account is None:
-
-                account_number = 1001
-
-            else:
-
-                previous_id = last_account["account_id"]
-
-                account_number = (
-                    int(previous_id.replace("ACC", "")) + 1
-                )
-
-            account_id = f"ACC{account_number}"
-
-            account_type = parameters["account_type"]
-
-            # --------------------------------------------------
-            # Insert account
-            # --------------------------------------------------
-
-            cursor.execute("""
-                INSERT INTO account (
-                    account_id,
-                    account_type,
-                    balance,
-                    currency
-                )
-                VALUES (?, ?, ?, ?)
-            """, (
-                account_id,
-                account_type,
-                0,
-                "INR"
-            ))
-
-            # --------------------------------------------------
-            # Record activity
-            # --------------------------------------------------
-
-            cursor.execute("""
-                INSERT INTO activity (
-                    action,
-                    description
-                )
-                VALUES (?, ?)
-            """, (
-                "Account created",
-                f"{account_type.capitalize()} account created"
-            ))
-
-            connection.commit()
-
-            connection.close()
-
-            account = {
-                "account_id": account_id,
-                "account_type": account_type,
-                "balance": 0,
-                "currency": "INR"
-            }
-
+        # Every other banking operation requires this user's account.
+        if account is None:
             return {
-                "status": "success",
-                "message": "Account created successfully.",
-                "account": account
+                "status": "failed",
+                "message": "You do not have an account yet."
             }
 
-        # ==================================================
-        # DEPOSIT
-        # ==================================================
+        # --------------------------------------------------
+        # DEPOSIT / WITHDRAW
+        # --------------------------------------------------
 
-        elif endpoint == "/account/deposit":
+        if endpoint in ("/account/deposit", "/account/withdraw"):
+            amount = parameters.get("amount")
 
-            connection = self.get_connection()
-
-            cursor = connection.cursor()
-
-            cursor.execute("""
-                SELECT *
-                FROM account
-                LIMIT 1
-            """)
-
-            account = cursor.fetchone()
-
-            if account is None:
-
-                connection.close()
-
+            if not isinstance(amount, (int, float)) or isinstance(amount, bool):
                 return {
                     "status": "failed",
-                    "message": "No account exists."
+                    "message": "Please provide a valid amount."
                 }
-
-            amount = parameters["amount"]
 
             if amount <= 0:
-
-                connection.close()
-
                 return {
                     "status": "failed",
-                    "message": "Deposit amount must be greater than zero."
+                    "message": "Amount must be greater than zero."
                 }
 
-            new_balance = account["balance"] + amount
+            is_deposit = endpoint == "/account/deposit"
 
-            # --------------------------------------------------
-            # Update balance
-            # --------------------------------------------------
-
-            cursor.execute("""
-                UPDATE account
-                SET balance = ?
-                WHERE account_id = ?
-            """, (
-                new_balance,
-                account["account_id"]
-            ))
-
-            # --------------------------------------------------
-            # Record transaction
-            # --------------------------------------------------
-
-            cursor.execute("""
-                INSERT INTO transactions (
-                    transaction_type,
-                    amount,
-                    currency,
-                    balance_after
-                )
-                VALUES (?, ?, ?, ?)
-            """, (
-                "deposit",
-                amount,
-                parameters["currency"],
-                new_balance
-            ))
-
-            # --------------------------------------------------
-            # Record activity
-            # --------------------------------------------------
-
-            cursor.execute("""
-                INSERT INTO activity (
-                    action,
-                    description
-                )
-                VALUES (?, ?)
-            """, (
-                "Deposit completed",
-                f"₹{amount} deposited"
-            ))
-
-            connection.commit()
-
-            connection.close()
-
-            updated_account = {
-                "account_id": account["account_id"],
-                "account_type": account["account_type"],
-                "balance": new_balance,
-                "currency": account["currency"]
-            }
-
-            return {
-                "status": "success",
-                "message": "Deposit successful.",
-                "account": updated_account
-            }
-
-        # ==================================================
-        # WITHDRAW
-        # ==================================================
-
-        elif endpoint == "/account/withdraw":
-
-            connection = self.get_connection()
-
-            cursor = connection.cursor()
-
-            cursor.execute("""
-                SELECT *
-                FROM account
-                LIMIT 1
-            """)
-
-            account = cursor.fetchone()
-
-            if account is None:
-
-                connection.close()
-
-                return {
-                    "status": "failed",
-                    "message": "No account exists."
-                }
-
-            amount = parameters["amount"]
-
-            if amount <= 0:
-
-                connection.close()
-
-                return {
-                    "status": "failed",
-                    "message": "Withdrawal amount must be greater than zero."
-                }
-
-            if amount > account["balance"]:
-
-                connection.close()
-
+            if not is_deposit and amount > account["balance"]:
                 return {
                     "status": "failed",
                     "message": "Insufficient account balance."
                 }
 
-            new_balance = account["balance"] - amount
+            new_balance = (
+                account["balance"] + amount
+                if is_deposit
+                else account["balance"] - amount
+            )
 
-            # --------------------------------------------------
-            # Update balance
-            # --------------------------------------------------
+            transaction_type = "deposit" if is_deposit else "withdrawal"
+            action = "Deposit completed" if is_deposit else "Withdrawal completed"
+            description = (
+                f"₹{amount:g} deposited"
+                if is_deposit
+                else f"₹{amount:g} withdrawn"
+            )
 
-            cursor.execute("""
-                UPDATE account
-                SET balance = ?
-                WHERE account_id = ?
-            """, (
-                new_balance,
-                account["account_id"]
-            ))
+            connection = self.get_connection()
 
-            # --------------------------------------------------
-            # Record transaction
-            # --------------------------------------------------
+            try:
+                connection.execute("""
+                    UPDATE account SET balance = ?
+                    WHERE user_id = ?
+                """, (new_balance, user_id))
 
-            cursor.execute("""
-                INSERT INTO transactions (
+                connection.execute("""
+                    INSERT INTO transactions (
+                        user_id, transaction_type, amount, currency, balance_after
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    user_id,
                     transaction_type,
                     amount,
-                    currency,
-                    balance_after
-                )
-                VALUES (?, ?, ?, ?)
-            """, (
-                "withdrawal",
-                amount,
-                parameters["currency"],
-                new_balance
-            ))
+                    account["currency"],
+                    new_balance
+                ))
 
-            # --------------------------------------------------
-            # Record activity
-            # --------------------------------------------------
+                connection.execute("""
+                    INSERT INTO activity (user_id, action, description)
+                    VALUES (?, ?, ?)
+                """, (user_id, action, description))
 
-            cursor.execute("""
-                INSERT INTO activity (
-                    action,
-                    description
-                )
-                VALUES (?, ?)
-            """, (
-                "Withdrawal completed",
-                f"₹{amount} withdrawn"
-            ))
+                connection.commit()
 
-            connection.commit()
-
-            connection.close()
+            finally:
+                connection.close()
 
             updated_account = {
-                "account_id": account["account_id"],
-                "account_type": account["account_type"],
-                "balance": new_balance,
-                "currency": account["currency"]
+                **account,
+                "balance": new_balance
             }
 
             return {
                 "status": "success",
-                "message": "Withdrawal successful.",
+                "message": (
+                    "Deposit successful."
+                    if is_deposit
+                    else "Withdrawal successful."
+                ),
                 "account": updated_account
             }
 
-        # ==================================================
+        # --------------------------------------------------
         # GET BALANCE
-        # ==================================================
+        # --------------------------------------------------
 
-        elif endpoint == "/account/balance":
-
-            account = self.get_account()
-
-            if account is None:
-
-                return {
-                    "status": "failed",
-                    "message": "No account exists."
-                }
-
+        if endpoint == "/account/balance":
             return {
                 "status": "success",
                 "message": "Balance retrieved successfully.",
@@ -518,237 +447,96 @@ class APIClient:
                 "currency": account["currency"]
             }
 
-        # ==================================================
+        # --------------------------------------------------
         # CHANGE ACCOUNT TYPE
-        # ==================================================
+        # --------------------------------------------------
 
-        elif endpoint == "/account/changeAccountType":
+        if endpoint == "/account/changeAccountType":
+            new_type = parameters.get("account_type")
+
+            if new_type not in ("savings", "current"):
+                return {
+                    "status": "failed",
+                    "message": "Invalid account type."
+                }
 
             connection = self.get_connection()
 
-            cursor = connection.cursor()
+            try:
+                connection.execute("""
+                    UPDATE account SET account_type = ?
+                    WHERE user_id = ?
+                """, (new_type, user_id))
 
-            cursor.execute("""
-                SELECT *
-                FROM account
-                LIMIT 1
-            """)
+                connection.execute("""
+                    INSERT INTO activity (user_id, action, description)
+                    VALUES (?, ?, ?)
+                """, (
+                    user_id,
+                    "Account converted",
+                    f"Account converted from {account['account_type']} to {new_type}"
+                ))
 
-            account = cursor.fetchone()
+                connection.commit()
 
-            if account is None:
-
+            finally:
                 connection.close()
 
-                return {
-                    "status": "failed",
-                    "message": "No account exists."
-                }
-
-            new_account_type = parameters["account_type"]
-
-            old_account_type = account["account_type"]
-
-            # --------------------------------------------------
-            # Update account type
-            # --------------------------------------------------
-
-            cursor.execute("""
-                UPDATE account
-                SET account_type = ?
-                WHERE account_id = ?
-            """, (
-                new_account_type,
-                account["account_id"]
-            ))
-
-            # --------------------------------------------------
-            # Record activity
-            # --------------------------------------------------
-
-            cursor.execute("""
-                INSERT INTO activity (
-                    action,
-                    description
-                )
-                VALUES (?, ?)
-            """, (
-                "Account converted",
-                (
-                    f"Account converted from "
-                    f"{old_account_type.capitalize()} "
-                    f"to "
-                    f"{new_account_type.capitalize()}"
-                )
-            ))
-
-            connection.commit()
-
-            connection.close()
-
-            updated_account = {
-                "account_id": account["account_id"],
-                "account_type": new_account_type,
-                "balance": account["balance"],
-                "currency": account["currency"]
-            }
+            account["account_type"] = new_type
 
             return {
                 "status": "success",
                 "message": "Account type changed successfully.",
-                "account": updated_account
+                "account": account
             }
 
-        # ==================================================
-        # EMAIL CONFIRMATION
-        # ==================================================
+        # --------------------------------------------------
+        # EMAIL / SMS CONFIRMATION
+        # --------------------------------------------------
 
-        elif endpoint == "/account/notification/email":
-
-            account = self.get_account()
-
-            if account is None:
-
-                return {
-                    "status": "failed",
-                    "message": "No account exists."
-                }
+        if endpoint in (
+            "/account/notification/email",
+            "/account/notification/sms"
+        ):
+            is_email = endpoint.endswith("/email")
+            channel = "Email" if is_email else "SMS"
 
             connection = self.get_connection()
 
-            cursor = connection.cursor()
+            try:
+                connection.execute("""
+                    INSERT INTO activity (user_id, action, description)
+                    VALUES (?, ?, ?)
+                """, (
+                    user_id,
+                    f"{channel} confirmation sent",
+                    f"Account confirmation {channel} sent"
+                ))
 
-            cursor.execute("""
-                INSERT INTO activity (
-                    action,
-                    description
-                )
-                VALUES (?, ?)
-            """, (
-                "Email confirmation sent",
-                "Account confirmation email sent"
-            ))
+                connection.commit()
 
-            connection.commit()
-
-            connection.close()
+            finally:
+                connection.close()
 
             return {
                 "status": "success",
-                "message": "Email confirmation sent.",
-                "notification_type": parameters[
-                    "notification_type"
-                ]
+                "message": f"{channel} confirmation sent.",
+                "notification_type": parameters.get("notification_type")
             }
 
-        # ==================================================
-        # SMS CONFIRMATION
-        # ==================================================
-
-        elif endpoint == "/account/notification/sms":
-
-            account = self.get_account()
-
-            if account is None:
-
-                return {
-                    "status": "failed",
-                    "message": "No account exists."
-                }
-
-            connection = self.get_connection()
-
-            cursor = connection.cursor()
-
-            cursor.execute("""
-                INSERT INTO activity (
-                    action,
-                    description
-                )
-                VALUES (?, ?)
-            """, (
-                "SMS confirmation sent",
-                "Account confirmation SMS sent"
-            ))
-
-            connection.commit()
-
-            connection.close()
-
-            return {
-                "status": "success",
-                "message": "SMS confirmation sent.",
-                "notification_type": parameters[
-                    "notification_type"
-                ]
-            }
-
-        # ==================================================
+        # --------------------------------------------------
         # TRANSACTION HISTORY
-        # ==================================================
+        # --------------------------------------------------
 
-        elif endpoint == "/account/transactions":
-
-            account = self.get_account()
-
-            if account is None:
-
-                return {
-                    "status": "failed",
-                    "message": "No account exists."
-                }
-
+        if endpoint == "/account/transactions":
             return {
                 "status": "success",
-                "message": (
-                    "Transaction history retrieved successfully."
-                ),
+                "message": "Transaction history retrieved successfully.",
                 "account_id": account["account_id"],
-                "transactions": self.get_transactions()
+                "transactions": self.get_transactions(user_id)
             }
-
-        # ==================================================
-        # UNKNOWN API
-        # ==================================================
-
-        else:
-
-            return {
-                "status": "failed",
-                "message": f"Unsupported API: {endpoint}"
-            }
-
-    # ======================================================
-    # GET CURRENT ACCOUNT
-    # ======================================================
-
-    def get_account(self):
-
-        connection = self.get_connection()
-
-        cursor = connection.cursor()
-
-        cursor.execute("""
-            SELECT
-                account_id,
-                account_type,
-                balance,
-                currency
-            FROM account
-            LIMIT 1
-        """)
-
-        row = cursor.fetchone()
-
-        connection.close()
-
-        if row is None:
-
-            return None
 
         return {
-            "account_id": row["account_id"],
-            "account_type": row["account_type"],
-            "balance": row["balance"],
-            "currency": row["currency"]
+            "status": "failed",
+            "message": f"Unsupported API: {endpoint}"
         }
