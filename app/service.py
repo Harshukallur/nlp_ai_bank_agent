@@ -39,46 +39,51 @@ class AccountService:
                 "message": "Please sign in before continuing."
             }
 
+        request = user_request.lower().strip()
+
+        if not request:
+            return {
+                "status": "failed",
+                "message": "Please enter a request."
+            }
+
         clarification = self.detect_ambiguous_request(
-            user_request, user_id
+            request, user_id
         )
         if clarification is not None:
             return clarification
 
-        unsupported = self.detect_unsupported_operation(user_request)
+        unsupported = self.detect_unsupported_operation(request)
         if unsupported is not None:
             return unsupported
 
-        request = user_request.lower().strip()
         account = self.api_client.get_account(user_id)
 
-        if account is None:
-            account_state_description = "NO ACCOUNT EXISTS FOR THIS USER."
-        else:
-            account_state_description = (
-                "THIS USER ALREADY HAS AN ACCOUNT. "
-                f"Account type: {account['account_type']}. "
-                f"Balance: ₹{account['balance']}."
-            )
+        # --------------------------------------------------
+        # DETERMINISTIC ACCOUNT CREATION
+        # --------------------------------------------------
+        # Explicit creation requests bypass the LLM.
+        # Creating an account does not require a deposit.
+        if self.is_account_creation_request(request):
 
-        # Deterministically handle an explicit account-creation request.
-        # Do not ask the LLM to infer a required account_type parameter.
-        creation_requested = self.is_account_creation_request(request)
-        target_type = self.extract_account_type(request)
-
-        if creation_requested:
             if account is not None:
                 return {
                     "status": "failed",
-                    "message": "You already have an account. "
-                               "Each user can have only one bank account."
+                    "message": (
+                        "You already have an account. "
+                        "Each user can have only one bank account."
+                    )
                 }
+
+            target_type = self.extract_account_type(request)
 
             if target_type is None:
                 return {
                     "status": "clarification_required",
-                    "message": "Would you like to create a savings "
-                               "account or a current account?"
+                    "message": (
+                        "Would you like to create a savings "
+                        "account or a current account?"
+                    )
                 }
 
             plan = {
@@ -94,6 +99,25 @@ class AccountService:
             }
 
         else:
+            if account is None and self.requires_existing_account(request):
+                return {
+                    "status": "failed",
+                    "message": (
+                        "Please create a savings or current account "
+                        "before performing this operation."
+                    )
+                }
+
+            account_state_description = (
+                "NO ACCOUNT EXISTS FOR THIS USER."
+                if account is None
+                else (
+                    "THIS USER ALREADY HAS AN ACCOUNT. "
+                    f"Account type: {account['account_type']}. "
+                    f"Balance: INR {account['balance']}."
+                )
+            )
+
             prompt = f"""
 USER REQUEST:
 {user_request}
@@ -104,10 +128,10 @@ CURRENT ACCOUNT STATE:
 API CATALOG:
 {self.catalog_text}
 
-Generate a JSON API execution plan. Use only APIs in the catalog.
+Generate a JSON API execution plan using only this catalog.
 
 INTENT RULES:
-1. Create/open an account using /account/new.
+1. Create an account using /account/new.
 2. Deposit using /account/deposit.
 3. Withdraw using /account/withdraw.
 4. Get balance using /account/balance.
@@ -115,14 +139,13 @@ INTENT RULES:
 6. Email confirmation uses /account/notification/email.
 7. SMS confirmation uses /account/notification/sms.
 8. Transaction history uses /account/transactions.
-9. Never confuse deposits with withdrawals.
-10. Never create a second account for an existing user.
-11. For a user without an account, creation must precede other
-    account operations.
-12. Preserve the requested operations and order.
-13. Include all required parameters from the API catalog.
-14. For APIs without parameters, use an empty object.
-15. Return JSON only:
+9. Never invent endpoints, parameters, IDs, or account details.
+10. Never confuse deposits with withdrawals.
+11. Never create a second account for an existing user.
+12. Use the execution order requested by the user.
+13. Do not invent missing amounts or account types.
+14. APIs without parameters must use an empty parameters object.
+15. Return only a JSON object in this format:
 {{
   "status": "success",
   "steps": [
@@ -134,14 +157,16 @@ INTENT RULES:
 }}
 """
 
-            response = self.llm.generate(prompt)
-
             try:
+                response = self.llm.generate(prompt)
                 plan = json.loads(response)
-            except (json.JSONDecodeError, TypeError):
+            except (ValueError, json.JSONDecodeError, TypeError):
                 return {
                     "status": "failed",
-                    "message": "I couldn't understand the requested operation."
+                    "message": (
+                        "I couldn't safely interpret your request. "
+                        "Please rephrase it and try again."
+                    )
                 }
 
             if not isinstance(plan, dict):
@@ -150,12 +175,14 @@ INTENT RULES:
                     "message": "The generated API plan is invalid."
                 }
 
-            # Repair obvious operations when the user already has an account.
             plan = self.repair_plan_for_existing_account(
                 user_request, plan, account
             )
 
-        # Validate the plan before executing any API.
+        # --------------------------------------------------
+        # VALIDATE BEFORE EXECUTION
+        # --------------------------------------------------
+
         is_valid, message = self.validator.validate(plan)
         if not is_valid:
             return {
@@ -172,7 +199,7 @@ INTENT RULES:
                 "message": intent_message
             }
 
-        # Re-read only the authenticated user's account.
+        # Re-read this authenticated user's account.
         account = self.api_client.get_account(user_id)
 
         account_state = {
@@ -190,13 +217,16 @@ INTENT RULES:
                 "message": business_message
             }
 
+        # Only the authenticated user's ID is passed to execution.
         results = self.orchestrator.execute(
             plan, user_id=user_id
         )
 
         if results.get("status") != "success":
             failed_results = results.get("results", [])
-            failed_message = "The requested operation could not be completed."
+            failed_message = (
+                "The requested operation could not be completed."
+            )
 
             if failed_results:
                 last_result = failed_results[-1].get("result", {})
@@ -227,16 +257,20 @@ INTENT RULES:
 
     def is_account_creation_request(self, request):
         patterns = [
-            r"\bcreate\s+(?:a\s+|an\s+)?(?:new\s+)?account\b",
-            r"\bopen\s+(?:a\s+|an\s+)?(?:new\s+)?account\b",
-            r"\bstart\s+(?:a\s+|an\s+)?(?:new\s+)?account\b",
-            r"\bnew\s+account\b"
+            r"\bcreate\s+(?:(?:a|an)\s+)?(?:new\s+)?(?:(?:savings|current)\s+)?account\b",
+            r"\bopen\s+(?:(?:a|an)\s+)?(?:new\s+)?(?:(?:savings|current)\s+)?account\b",
+            r"\bstart\s+(?:(?:a|an)\s+)?(?:new\s+)?(?:(?:savings|current)\s+)?account\b",
+            r"\bnew\s+(?:(?:savings|current)\s+)?account\b",
         ]
-        return any(re.search(pattern, request) for pattern in patterns)
+
+        return any(
+            re.search(pattern, request, re.IGNORECASE)
+            for pattern in patterns
+        )
 
     def extract_account_type(self, request):
-        savings = re.search(r"\bsavings?\b", request)
-        current = re.search(r"\bcurrent\b", request)
+        savings = re.search(r"\bsavings?\b", request, re.IGNORECASE)
+        current = re.search(r"\bcurrent\b", request, re.IGNORECASE)
 
         if savings and current:
             return None
@@ -245,6 +279,30 @@ INTENT RULES:
         if current:
             return "current"
         return None
+
+    def requires_existing_account(self, request):
+        operation_patterns = [
+            r"\bdeposit\b",
+            r"\bwithdraw(?:al)?\b",
+            r"\bbalance\b",
+            r"\btransaction(?:s| history| details)?\b",
+            r"\bconvert\b",
+            r"\bconversion\b",
+            r"\bchange account\b",
+            r"\bchange my account\b",
+            r"\bswitch account\b",
+            r"\bswitch my account\b",
+            r"\bupgrade account\b",
+            r"\bupgrade my account\b",
+            r"\bemail\b",
+            r"\bsms\b",
+            r"\btext message\b",
+        ]
+
+        return any(
+            re.search(pattern, request, re.IGNORECASE)
+            for pattern in operation_patterns
+        )
 
     # ==================================================
     # STATE-AWARE PLAN REPAIR
@@ -258,8 +316,6 @@ INTENT RULES:
 
         request = user_request.lower().strip()
 
-        # Account creation is handled separately and must never create
-        # a second account for a user who already has one.
         if self.is_account_creation_request(request):
             return plan
 
@@ -298,8 +354,7 @@ INTENT RULES:
         if any(word in request for word in [
             "transaction", "transactions", "transaction history",
             "account history", "transaction details",
-            "transaction records", "show my transactions",
-            "show transactions"
+            "show my transactions", "show transactions"
         ]):
             return single_step("/account/transactions")
 
@@ -378,7 +433,6 @@ INTENT RULES:
         if account is not None:
             return None
 
-        # Explicit account creation is not ambiguous.
         if self.is_account_creation_request(request):
             return None
 
@@ -420,7 +474,9 @@ INTENT RULES:
         ):
             return {
                 "status": "failed",
-                "message": "The requested transfer operation is not supported."
+                "message": (
+                    "The requested transfer operation is not supported."
+                )
             }
 
         return None
@@ -440,6 +496,14 @@ INTENT RULES:
             if isinstance(step, dict)
         ]
 
+        # Account creation must map to the actual catalog endpoint.
+        if self.is_account_creation_request(request):
+            if planned_apis != ["/account/new"]:
+                return False, (
+                    "The requested account creation operation "
+                    "could not be identified."
+                )
+
         deposit_requested = bool(re.search(
             r"\b(deposit|add funds|add money)\b", request
         ))
@@ -449,38 +513,53 @@ INTENT RULES:
 
         if deposit_requested:
             if "/account/deposit" not in planned_apis:
-                return False, "The requested deposit operation could not be identified."
+                return False, (
+                    "The requested deposit operation could not be identified."
+                )
             if "/account/withdraw" in planned_apis:
                 return False, "The plan incorrectly includes a withdrawal."
 
         if withdrawal_requested:
             if "/account/withdraw" not in planned_apis:
-                return False, "The requested withdrawal operation could not be identified."
+                return False, (
+                    "The requested withdrawal operation could not be identified."
+                )
             if "/account/deposit" in planned_apis:
                 return False, "The plan incorrectly includes a deposit."
 
-        if "balance" in request and not deposit_requested and not withdrawal_requested:
+        if (
+            "balance" in request
+            and not deposit_requested
+            and not withdrawal_requested
+        ):
             if "/account/balance" not in planned_apis:
-                return False, "The requested balance operation could not be identified."
+                return False, (
+                    "The requested balance operation could not be identified."
+                )
 
         if any(word in request for word in [
             "transaction history", "transactions",
             "transaction details", "account history"
         ]):
             if "/account/transactions" not in planned_apis:
-                return False, "The requested transaction history operation could not be identified."
+                return False, (
+                    "The requested transaction history operation "
+                    "could not be identified."
+                )
 
         if any(word in request for word in ["sms", "text message"]):
             if "/account/notification/sms" not in planned_apis:
-                return False, "The requested SMS notification operation could not be identified."
+                return False, (
+                    "The requested SMS notification operation "
+                    "could not be identified."
+                )
 
         if "email" in request:
             if "/account/notification/email" not in planned_apis:
-                return False, "The requested email notification operation could not be identified."
-
-        if self.is_account_creation_request(request):
-            if "/account/new" not in planned_apis:
-                return False, "The requested account creation operation could not be identified."
+                return False, (
+                    "The requested email notification operation "
+                    "could not be identified."
+                )
 
         conversion_requested = any(word in request for word in [
             "convert", "conversion", "change account", "change my account",
@@ -490,7 +569,10 @@ INTENT RULES:
 
         if conversion_requested:
             if "/account/changeAccountType" not in planned_apis:
-                return False, "The requested account conversion operation could not be identified."
+                return False, (
+                    "The requested account conversion operation "
+                    "could not be identified."
+                )
 
         return True, "Intent validation passed."
 
@@ -503,11 +585,14 @@ INTENT RULES:
 
         if "/account/new" in apis and len(apis) == 1:
             if account is None:
-                return "The account operation completed, but account details could not be retrieved."
+                return (
+                    "The account operation completed, but account "
+                    "details could not be retrieved."
+                )
 
             return (
                 f"{account['account_type'].capitalize()} account "
-                "created successfully."
+                "created successfully!"
             )
 
         if "/account/deposit" in apis and len(apis) == 1:
@@ -525,7 +610,10 @@ INTENT RULES:
             )
 
         if "/account/balance" in apis and len(apis) == 1:
-            return f"Your current account balance is ₹{account['balance']}."
+            return (
+                f"Your current account balance is "
+                f"₹{account['balance']}."
+            )
 
         if "/account/changeAccountType" in apis and len(apis) == 1:
             return "Account type changed successfully."
@@ -540,6 +628,9 @@ INTENT RULES:
             transactions = self.api_client.get_transactions(user_id)
             if not transactions:
                 return "There are no transactions available yet."
-            return f"You have {len(transactions)} transaction(s) in your account."
+            return (
+                f"You have {len(transactions)} transaction(s) "
+                "in your account."
+            )
 
         return "Your request was completed successfully."
